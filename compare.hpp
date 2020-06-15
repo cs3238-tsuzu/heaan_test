@@ -9,6 +9,14 @@
 #include "cipher.hpp"
 
 namespace CKKSCompare {
+    std::ostream& operator << (std::ostream& os, EasyHEAAN::Cipher& c) {
+        os << "logp: " << c.getCiphertext().logp
+           << ", logq: " << c.getCiphertext().logq
+            << ", n: " << c.getCiphertext().n;
+
+        return os;
+    }
+
 //    using namespace std;
     using namespace NTL;
     using namespace EasyHEAAN;
@@ -22,7 +30,8 @@ namespace CKKSCompare {
         auto bx = mx + 1;
 
         for(std::size_t i = 0; i < d; ++i) {
-            bx.squareInplace().rescaleByInplace();
+            bx *= bx;
+            bx.rescaleByInplace();
 
             ax *= bx + 1;
             ax.rescaleByInplace();
@@ -33,11 +42,27 @@ namespace CKKSCompare {
 
     Cipher sqrt(const Cipher& x, std::size_t d) {
         auto ax = x;
-        auto bx = x + 1;
+        auto bx = x - 1;
 
         for(std::size_t i = 0; i < d; ++i) {
-            ax = ax * (-bx * 0.5 + 1);
-            bx = bx.square() * ((bx+-3) * (.25));
+            auto x = -bx / 2 + 1;
+            x.rescaleByInplace();
+
+            ax.modDownInplace();
+            ax *= x;
+            ax.rescaleByInplace();
+
+            if (i + 1 == d) {
+                break;
+            }
+
+            auto s = bx * bx;
+            s.rescaleByInplace();
+            auto t = (bx - 3) / 4;
+            t.rescaleByInplace();
+
+            bx = s * t;
+            bx.rescaleByInplace();
         }
 
         return ax;

@@ -42,6 +42,15 @@ int main3(int argc, char** argv) {
 
 }
 
+std::ostream& operator << (std::ostream& os, EasyHEAAN::Cipher& c) {
+    os << "logp: " << c.getCiphertext().logp
+       << ", logq: " << c.getCiphertext().logq
+       << ", n: " << c.getCiphertext().n;
+
+    return os;
+}
+
+
 int main() {
     long logq = 1200; ///< Ciphertext modulus (this value should be <= logQ in "scr/Params.h")
     long logp = 60; ///< Scaling Factor (larger logp will give you more accurate value)
@@ -68,26 +77,23 @@ int main() {
     auto debug = [&](const EasyHEAAN::Cipher& c) {
         auto v = crypto.decrypt(c);
 
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 3; ++i) {
             std::cout << v[i] << ", ";
         }
         std::cout << std::endl;
     };
 
-    auto cph = crypto.encrypt({1,2,3}, n, 1);
+    auto cph = crypto.encrypt({1,2,.5}, n, 1);
 
     std::cout << "encrypted" << std::endl;
 
-    auto x = cph;
     auto d = 5;
 
-
-
-//    auto inv = CKKSCompare::inv(cph, 7);
+    auto inv = CKKSCompare::sqrt(cph, d);
 
     std::cout << "inversed" << std::endl;
 
-    for(auto&& v: crypto.decrypt(ax)) {
+    for(auto&& v: crypto.decrypt(inv)) {
         std::cout << v << std::endl;
     }
 }

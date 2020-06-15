@@ -11,7 +11,6 @@
 #include "context.hpp"
 
 namespace EasyHEAAN {
-
     class Cipher: private Context {
         Ciphertext cipher;
 
@@ -25,67 +24,46 @@ namespace EasyHEAAN {
         Cipher &operator=(const Cipher &) = default;
         Cipher &operator=(Cipher &&) = default;
 
-        Cipher operator -() const {
+        Cipher operator()(long dlogpUnit = 1) const {
+            return this->rescaleBy(dlogpUnit);
+        }
+
+        Cipher rescaleBy(long dlogpUnit = 1) const {
+            dlogpUnit *= this->logp;
+
             Ciphertext res;
-            this->scheme->negate(res, const_cast<Ciphertext&>(this->cipher));
+            this->scheme->reScaleBy(res, const_cast<Ciphertext&>(this->cipher), dlogpUnit);
 
             return Cipher(*this, std::move(res));
         }
 
-        Cipher& negate() {
-            this->scheme->negateAndEqual(this->cipher);
+        Cipher& rescaleByInplace(long dlogpUnit = 1) {
+            dlogpUnit *= this->logp;
+
+            this->scheme->reScaleByAndEqual(this->cipher, dlogpUnit);
 
             return *this;
         }
 
-        Cipher operator()(double dlogp = -1) const {
-            if(dlogp < 0) {
-                dlogp = this->logp;
-            }
+        Cipher modDown(long dlogpUnit = 1) const {
+            dlogpUnit *= this->logp;
 
             Ciphertext res;
-            this->scheme->reScaleBy(res, const_cast<Ciphertext&>(this->cipher), dlogp);
+            this->scheme->modDownBy(res, const_cast<Ciphertext&>(this->cipher), dlogpUnit);
 
             return Cipher(*this, std::move(res));
         }
 
-        Cipher rescaleBy(double dlogp = -1) const {
-            return this->operator()(dlogp);
-        }
+        Cipher& modDownInplace(long dlogpUnit = 1) {
+            dlogpUnit *= this->logp;
 
-        Cipher& rescaleByInplace(double dlogp = -1) {
-            if(dlogp < 0) {
-                dlogp = this->logp;
-            }
-
-            this->scheme->reScaleByAndEqual(this->cipher, dlogp);
-
-            return *this;
-        }
-
-        Cipher modDown(double dlogp = -1) const {
-            if(dlogp < 0) {
-                dlogp = this->logp;
-            }
-
-            Ciphertext res;
-            this->scheme->modDownBy(res, const_cast<Ciphertext&>(this->cipher), dlogp);
-
-            return Cipher(*this, std::move(res));
-        }
-
-        Cipher modDownInplace(double dlogp = -1) {
-            if(dlogp < 0) {
-                dlogp = this->logp;
-            }
-
-            this->scheme->modDownByAndEqual(this->cipher, dlogp);
+            this->scheme->modDownByAndEqual(this->cipher, dlogpUnit);
 
             return *this;
         }
 
         Cipher operator +(const Cipher& rh) const {
-                if (this->scheme != rh.scheme) {
+            if (this->scheme != rh.scheme) {
                 throw std::runtime_error("scheme mismatch");
             }
 
@@ -103,8 +81,8 @@ namespace EasyHEAAN {
         }
 
         Cipher operator *(const Cipher& rh) const {
-            if (this->scheme != rh.scheme) {
-                throw std::runtime_error("scheme mismatch");
+            if(this == &rh) {
+                return this->square();
             }
 
             Ciphertext res;
@@ -137,8 +115,8 @@ namespace EasyHEAAN {
         }
 
         Cipher& operator *=(const Cipher& rh) {
-            if (this->scheme != rh.scheme) {
-                throw std::runtime_error("scheme mismatch");
+            if(this == &rh) {
+                return this->squareInplace();
             }
 
             this->scheme->multAndEqual(this->cipher, const_cast<Ciphertext&>(rh.cipher));
@@ -150,6 +128,54 @@ namespace EasyHEAAN {
             this->scheme->multByConstAndEqual(this->cipher, d, this->cipher.logp);
 
             return *this;
+        }
+
+        Cipher operator -() const {
+            Ciphertext res;
+            this->scheme->negate(res, const_cast<Ciphertext&>(this->cipher));
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher& negate() {
+            this->scheme->negateAndEqual(this->cipher);
+
+            return *this;
+        }
+
+        Cipher operator -(const Cipher& c) const {
+            return *this - Cipher(c);
+        }
+
+        Cipher operator -(Cipher&& c) const {
+            return *this + c.negate();
+        }
+
+        Cipher operator -(double d) const {
+            return *this + (-d);
+        }
+
+        Cipher& operator -=(const Cipher& c) {
+            return *this -= Cipher(c);
+        }
+
+        Cipher& operator -=(Cipher&& c) {
+            c.negate();
+            *this += c;
+
+            return *this;
+        }
+
+        Cipher& operator -=(double d)  {
+            return (*this) += -d;
+        }
+
+        Cipher operator /(double d) const {
+            return (*this) * (1. / d);
+        }
+
+        Cipher& operator /=(double d) {
+            return (*this) *= (1. / d);
         }
 
         Cipher square() const {
