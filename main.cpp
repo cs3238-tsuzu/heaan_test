@@ -53,11 +53,11 @@ std::ostream& operator << (std::ostream& os, EasyHEAAN::Cipher& c) {
 
 int main() {
     long logq = 1200; ///< Ciphertext modulus (this value should be <= logQ in "scr/Params.h")
-    long logp = 60; ///< Scaling Factor (larger logp will give you more accurate value)
+    long logp = 30; ///< Scaling Factor (larger logp will give you more accurate value)
     long logn = 3; ///< number of slot is 1024 (this value should be < logN in "src/Params.h")
     long n = 1 << logn;
     long slots = n;
-    long numThread = 8;
+    long numThread = 6;
 
     // Construct and Generate Public Keys //
     srand(time(NULL));
@@ -72,7 +72,14 @@ int main() {
     std::cout << "key generation finished" << std::endl;
 
     auto crypto = EasyHEAAN::Crypto(scheme, logp, logq);
+    EasyHEAAN::Bootstrapper bs;
+    bs.logq = logp + 10;
+    bs.logQ = logQ;
+
+    scheme->addBootKey(secretKey, logn, bs.logq + bs.logI);
+
     crypto.useSecretKey(secretKey);
+    crypto.setupBootstrapping(bs);
 
     auto debug = [&](const EasyHEAAN::Cipher& c) {
         auto v = crypto.decrypt(c);
@@ -83,9 +90,41 @@ int main() {
         std::cout << std::endl;
     };
 
-    auto cph = crypto.encrypt({1,2,.5}, n, 1);
+    auto cph = crypto.encrypt({1,2,4}, n, 1);
+
+    while(cph.getCiphertext().logq > logp*2) {
+        cph.modDownInplace();
+    }
+
+    for(auto&& v : crypto.decrypt(cph)) {
+        std::cout << v << std::endl;
+    }
+
+    std::cout << cph.getCiphertext().logq << std::endl;
+    std::cout << cph.getCiphertext().logp << std::endl;
+
+    cph.bootstrapInplace();
+
+    std::cout << cph.getCiphertext().logq << std::endl;
+    std::cout << cph.getCiphertext().logp << std::endl;
+
+    for(auto&& v : crypto.decrypt(cph)) {
+        std::cout << v << std::endl;
+    }
+
+    return 0;
+
+    auto res = CKKSCompare::maxIdx({
+       crypto.encrypt({0.6,0.9,1.3}, n, 1),
+        crypto.encrypt({1.2,0.5,0.4}, n, 1),
+    }, 5, 5, 5, 5);
 
     std::cout << "encrypted" << std::endl;
+
+    for(auto&& v : crypto.decrypt(res[0])) {
+        std::cout << v << std::endl;
+    }
+    return 0;
 
     auto d = 5;
 

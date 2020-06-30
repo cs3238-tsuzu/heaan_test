@@ -8,9 +8,17 @@
 #include <memory>
 
 namespace EasyHEAAN {
+    struct Bootstrapper {
+        long logq = 50;
+        long logQ = 1200;
+        long logT = 2;
+        long logI = 4;
+    };
+
     struct Context {
         std::shared_ptr<Scheme> scheme;
         long logp;
+        std::optional<Bootstrapper> bs;
 
         Context(std::shared_ptr<Scheme> scheme, long logp): scheme(scheme), logp(logp) {}
         Context() = delete;

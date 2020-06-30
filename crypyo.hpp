@@ -39,6 +39,10 @@ namespace EasyHEAAN {
             this->secretKey = sk;
         }
 
+        void setupBootstrapping(const Bootstrapper& bs) {
+            this->bs = bs;
+        }
+
         std::vector<double> decrypt(const Cipher& c) {
             if(!this->secretKey) {
                 throw std::runtime_error("secret key is not  set");

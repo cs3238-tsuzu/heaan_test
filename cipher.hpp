@@ -10,18 +10,41 @@
 #include <stdexcept>
 #include "context.hpp"
 
+constexpr bool useValidation = true;
+
 namespace EasyHEAAN {
-    class Cipher: private Context {
+    class Cipher : private Context {
         Ciphertext cipher;
 
+    private:
+        inline
+        void validate(const Cipher& rh_) const {
+            if constexpr(useValidation) {
+                const auto lh = this->getCiphertext();
+                const auto rh = rh_.getCiphertext();
+
+                if (lh.logq != rh.logq) {
+                    throw std::runtime_error("logq mismatch");
+                }
+                if (lh.logp != rh.logp) {
+                    throw std::runtime_error("logp mismatch");
+                }
+            }
+        }
+
     public:
-        Cipher(const Context& ctx) : Context(ctx) {}
-        Cipher(const Context& ctx, const Ciphertext &c) : Context(ctx), cipher(c) {}
-        Cipher(const Context& ctx, Ciphertext &&c) : Context(ctx), cipher(c) {}
+        Cipher(const Context &ctx) : Context(ctx) {}
+
+        Cipher(const Context &ctx, const Ciphertext &c) : Context(ctx), cipher(c) {}
+
+        Cipher(const Context &ctx, Ciphertext &&c) : Context(ctx), cipher(c) {}
 
         Cipher(const Cipher &) = default;
+
         Cipher(Cipher &&) = default;
+
         Cipher &operator=(const Cipher &) = default;
+
         Cipher &operator=(Cipher &&) = default;
 
         Cipher operator()(long dlogpUnit = 1) const {
@@ -32,15 +55,28 @@ namespace EasyHEAAN {
             dlogpUnit *= this->logp;
 
             Ciphertext res;
-            this->scheme->reScaleBy(res, const_cast<Ciphertext&>(this->cipher), dlogpUnit);
+            this->scheme->reScaleBy(res, const_cast<Ciphertext &>(this->cipher), dlogpUnit);
 
             return Cipher(*this, std::move(res));
         }
 
-        Cipher& rescaleByInplace(long dlogpUnit = 1) {
+        Cipher &rescaleByInplace(long dlogpUnit = 1) {
             dlogpUnit *= this->logp;
 
             this->scheme->reScaleByAndEqual(this->cipher, dlogpUnit);
+
+            return *this;
+        }
+
+        Cipher rescaleTo(const Cipher &c) const {
+            Ciphertext res;
+            this->scheme->reScaleTo(res, const_cast<Ciphertext &>(this->cipher), c.getCiphertext().logp);
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher &rescaleToInplace(const Cipher &c) {
+            this->scheme->reScaleToAndEqual(this->cipher, c.getCiphertext().logp);
 
             return *this;
         }
@@ -49,12 +85,12 @@ namespace EasyHEAAN {
             dlogpUnit *= this->logp;
 
             Ciphertext res;
-            this->scheme->modDownBy(res, const_cast<Ciphertext&>(this->cipher), dlogpUnit);
+            this->scheme->modDownBy(res, const_cast<Ciphertext &>(this->cipher), dlogpUnit);
 
             return Cipher(*this, std::move(res));
         }
 
-        Cipher& modDownInplace(long dlogpUnit = 1) {
+        Cipher &modDownInplace(long dlogpUnit = 1) {
             dlogpUnit *= this->logp;
 
             this->scheme->modDownByAndEqual(this->cipher, dlogpUnit);
@@ -62,140 +98,217 @@ namespace EasyHEAAN {
             return *this;
         }
 
-        Cipher operator +(const Cipher& rh) const {
-            if (this->scheme != rh.scheme) {
-                throw std::runtime_error("scheme mismatch");
-            }
-
+        Cipher modDownTo(const Cipher& c) const {
             Ciphertext res;
-            this->scheme->add(res, const_cast<Ciphertext&>(this->cipher), const_cast<Ciphertext&>(rh.cipher));
+            this->scheme->modDownTo(res, const_cast<Ciphertext&>(this->getCiphertext()), c.getCiphertext().logq);
 
             return Cipher(*this, std::move(res));
         }
 
-        Cipher operator +(double d) const {
-            Ciphertext res;
-            this->scheme->addConst(res, const_cast<Ciphertext&>(this->cipher), d, this->cipher.logp);
-
-            return Cipher(*this, std::move(res));
-        }
-
-        Cipher operator *(const Cipher& rh) const {
-            if(this == &rh) {
-                return this->square();
-            }
-
-            Ciphertext res;
-            this->scheme->mult(res, const_cast<Ciphertext&>(this->cipher), const_cast<Ciphertext&>(rh.cipher));
-
-            return Cipher(*this, std::move(res));
-        }
-
-        Cipher operator *(double d) const {
-            Ciphertext res;
-            this->scheme->multByConst(res, const_cast<Ciphertext&>(this->cipher), d, this->cipher.logp);
-
-            return Cipher(*this, std::move(res));
-        }
-
-        Cipher& operator +=(const Cipher& rh) {
-            if (this->scheme != rh.scheme) {
-                throw std::runtime_error("scheme mismatch");
-            }
-
-            this->scheme->addAndEqual(this->cipher, const_cast<Ciphertext&>(rh.cipher));
+        Cipher &modDownToInplace(const Cipher& c) {
+            this->scheme->modDownToAndEqual(this->cipher, c.getCiphertext().logq);
 
             return *this;
         }
 
-        Cipher& operator +=(double d) {
+
+        Cipher operator+(const Cipher &rh) const {
+            if (this->scheme != rh.scheme) {
+                throw std::runtime_error("scheme mismatch");
+            }
+            this->validate(rh);
+
+            Ciphertext res;
+            this->scheme->add(res, const_cast<Ciphertext &>(this->cipher), const_cast<Ciphertext &>(rh.cipher));
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher operator+(double d) const {
+            Ciphertext res;
+            this->scheme->addConst(res, const_cast<Ciphertext &>(this->cipher), d, this->cipher.logp);
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher operator*(const Cipher &rh) const {
+            if (this == &rh) {
+                return this->square();
+            }
+            this->validate(rh);
+
+            Ciphertext res;
+            this->scheme->mult(res, const_cast<Ciphertext &>(this->cipher), const_cast<Ciphertext &>(rh.cipher));
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher operator*(double d) const {
+            Ciphertext res;
+            this->scheme->multByConst(res, const_cast<Ciphertext &>(this->cipher), d, this->cipher.logp);
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher &operator+=(const Cipher &rh) {
+            if (this->scheme != rh.scheme) {
+                throw std::runtime_error("scheme mismatch");
+            }
+            this->validate(rh);
+
+            this->scheme->addAndEqual(this->cipher, const_cast<Ciphertext &>(rh.cipher));
+
+            return *this;
+        }
+
+        Cipher &operator+=(double d) {
             this->scheme->addConstAndEqual(this->cipher, d, this->cipher.logp);
 
             return *this;
         }
 
-        Cipher& operator *=(const Cipher& rh) {
-            if(this == &rh) {
+        Cipher &operator*=(const Cipher &rh) {
+            if (this == &rh) {
                 return this->squareInplace();
             }
+            this->validate(rh);
 
-            this->scheme->multAndEqual(this->cipher, const_cast<Ciphertext&>(rh.cipher));
+            this->scheme->multAndEqual(this->cipher, const_cast<Ciphertext &>(rh.cipher));
 
             return *this;
         }
 
-        Cipher& operator *=(double d) {
+        Cipher &operator*=(double d) {
             this->scheme->multByConstAndEqual(this->cipher, d, this->cipher.logp);
 
             return *this;
         }
 
-        Cipher operator -() const {
+        Cipher operator-() const {
             Ciphertext res;
-            this->scheme->negate(res, const_cast<Ciphertext&>(this->cipher));
+            this->scheme->negate(res, const_cast<Ciphertext &>(this->cipher));
 
             return Cipher(*this, std::move(res));
         }
 
-        Cipher& negate() {
+        Cipher &negate() {
             this->scheme->negateAndEqual(this->cipher);
 
             return *this;
         }
 
-        Cipher operator -(const Cipher& c) const {
-            return *this - Cipher(c);
+        Cipher operator-(const Cipher &rh) const {
+            return *this - Cipher(rh);
         }
 
-        Cipher operator -(Cipher&& c) const {
-            return *this + c.negate();
+        Cipher operator-(Cipher&& rh) const {
+            this->validate(rh);
+
+            return *this + rh.negate();
         }
 
-        Cipher operator -(double d) const {
+        Cipher operator-(double d) const {
             return *this + (-d);
         }
 
-        Cipher& operator -=(const Cipher& c) {
-            return *this -= Cipher(c);
+        Cipher &operator-=(const Cipher &rh) {
+            return *this -= Cipher(rh);
         }
 
-        Cipher& operator -=(Cipher&& c) {
-            c.negate();
-            *this += c;
+        Cipher &operator-=(Cipher &&rh) {
+            this->validate(rh);
+
+            rh.negate();
+            *this += rh;
 
             return *this;
         }
 
-        Cipher& operator -=(double d)  {
+        Cipher &operator-=(double d) {
             return (*this) += -d;
         }
 
-        Cipher operator /(double d) const {
+        Cipher operator/(double d) const {
             return (*this) * (1. / d);
         }
 
-        Cipher& operator /=(double d) {
+        Cipher &operator/=(double d) {
             return (*this) *= (1. / d);
         }
 
         Cipher square() const {
             Ciphertext res;
-            this->scheme->square(res, const_cast<Ciphertext&>(this->cipher));
+            this->scheme->square(res, const_cast<Ciphertext &>(this->cipher));
 
             return Cipher(*this, std::move(res));
         }
 
-        Cipher& squareInplace() {
+        Cipher &squareInplace() {
             this->scheme->squareAndEqual(this->cipher);
 
             return *this;
         }
 
-        Ciphertext& getCiphertext() {
+        Cipher pow(int m) const {
+            if (m == 0) {
+                throw std::runtime_error("m must not be zero");
+            }
+
+            auto c = *this;
+            while ((m & 1) == 0) {
+                c.squareInplace();
+                c.rescaleByInplace();
+                m >>= 1;
+            }
+
+            auto res = c;
+            c.squareInplace();
+            c.rescaleByInplace();
+            m >>= 1;
+
+            if (m == 0) {
+                return res;
+            }
+
+            res.modDownInplace();
+
+            while (m != 0) {
+                if (m & 1) {
+                    res *= c;
+                    res.rescaleByInplace();
+                } else {
+                    res.modDownInplace();
+                }
+
+                c.squareInplace();
+                c.rescaleByInplace();
+                m >>= 1;
+            }
+
+            return res;
+        }
+
+        // Bootstrapping
+
+        Cipher& bootstrapInplace() {
+            if(!bs) {
+                throw std::runtime_error("Bootstrapping options are not set");
+            }
+
+            this->scheme->bootstrapAndEqual(this->getCiphertext(), bs->logq, bs->logQ, bs->logT, bs->logI);
+
+            return *this;
+        }
+
+        Ciphertext &getCiphertext() {
             return this->cipher;
         }
 
-        Ciphertext& operator ->() {
+        const Ciphertext &getCiphertext() const {
+            return this->cipher;
+        }
+
+        Ciphertext &operator->() {
             return this->cipher;
         }
     };

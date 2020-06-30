@@ -6,6 +6,7 @@
 #define HEAAN_TEST_COMPARE_HPP
 #include <HEAAN.h>
 #include <cstring>
+#include <iterator>
 #include "cipher.hpp"
 
 namespace CKKSCompare {
@@ -67,6 +68,72 @@ namespace CKKSCompare {
 
         return ax;
     }
+
+    template<typename Iterator>
+    Cipher sum(Iterator begin, Iterator end) {
+        if(begin == end) {
+            throw std::runtime_error("must contain >0 values");
+        }
+
+        auto sum = *begin;
+        for(auto it = std::next(begin); it != end; std::advance(it, 1)) {
+            sum += *it;
+        }
+
+        return sum;
+    }
+
+    Cipher sum(const std::vector<Cipher>& a) {
+        return sum(a.begin(), a.end());
+    }
+
+    std::vector<Cipher> maxIdx(const std::vector<Cipher>& a, int d, int d_, int m, int t) {
+        auto inv = ::CKKSCompare::inv(
+            (sum(a) / a.size()).rescaleByInplace(),
+            d_
+        );
+
+        std::vector<Cipher> b;
+        b.reserve(a.size());
+        for(int i = 0; i < a.size() - 1; ++i) {
+            auto ai = a[i].modDownTo(inv);
+            ai *= inv;
+            ai.rescaleByInplace();
+            ai /= a.size();
+            ai.rescaleByInplace();
+            b.emplace_back(std::move(ai));
+        }
+        b.emplace_back(-sum(b)+1);
+
+        for(int i = 0; i < t; ++i) {
+            for(auto& c : b) {
+                c.pow(m);
+            }
+
+            auto inv = ::CKKSCompare::inv(sum(b), d);
+
+            for(int j = 0; j < b.size() - 1; ++j) {
+                b[j].modDownToInplace(inv);
+                b[j] *= inv;
+                b[j].rescaleByInplace();
+            }
+            b[b.size() - 1] = sum(b.begin(), std::prev(b.end()));
+        }
+
+        return b;
+    }
+//    Cipher comp(const Cipher& a, const Cipher& b, std::size_t d, std::size_t d_, std::size_t t, std::size_t m) {
+//        auto at = a / 2;
+//
+//        at *= inv(((a+b) / 2).rescaleByInplace(), d);
+//        at.rescaleByInplace();
+//
+//        auto bt = -at+1;
+//
+//        for(std::size_t i = 0; i < t; ++i) {
+//
+//        }
+//    }
 }
 
 #endif //HEAAN_TEST_COMPARE_HPP
