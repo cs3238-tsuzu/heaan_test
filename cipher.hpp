@@ -32,6 +32,45 @@ namespace EasyHEAAN {
             }
         }
 
+        inline
+        Cipher autoAdjustment(Cipher rh) {
+            if constexpr (!useValidation) {
+                return rh;
+            }
+
+            if (this->getCiphertext().logq < this->logp * 2) {
+                this->bootstrapInplace();
+            }
+
+            auto diffLogp = this->getCiphertext().logp - rh.getCiphertext().logp;
+
+            if (diffLogp > 0) {
+                auto nextLogq = this->getCiphertext().logq - std::abs(diffLogp);
+
+                if (nextLogq < this->logp * 2) {
+                    this->bootstrapInplace();
+                }
+
+                this->rescaleToInplace(rh);
+            }else if (diffLogp < 0) {
+                auto nextLogq = rh.getCiphertext().logq - std::abs(diffLogp);
+
+                if (nextLogq < this->logp * 2) {
+                    rh.bootstrapInplace();
+                }
+
+                rh.rescaleToInplace(*this);
+            }
+
+            if (this->getCiphertext().logq > rh.getCiphertext().logq) {
+                this->modDownToInplace(rh);
+            } else if (this->getCiphertext().logq < rh.getCiphertext().logq) {
+                rh.modDownToInplace(*this);
+            }
+
+            return std::move(rh);
+        }
+
     public:
         Cipher(const Context &ctx) : Context(ctx) {}
 

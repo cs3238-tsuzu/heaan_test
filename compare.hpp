@@ -88,10 +88,14 @@ namespace CKKSCompare {
     }
 
     std::vector<Cipher> maxIdx(const std::vector<Cipher>& a, int d, int d_, int m, int t) {
+        std::cout << "logQ" << a[0].getCiphertext().logq << std::endl;
         auto inv = ::CKKSCompare::inv(
             (sum(a) / a.size()).rescaleByInplace(),
             d_
         );
+        // (d_ + 1) + 1
+
+        std::cout << "logQ" << inv.getCiphertext().logq << std::endl;
 
         std::vector<Cipher> b;
         b.reserve(a.size());
@@ -104,20 +108,36 @@ namespace CKKSCompare {
             b.emplace_back(std::move(ai));
         }
         b.emplace_back(-sum(b)+1);
+        // 2
 
+        std::cout << b[0].getCiphertext().logq << std::endl;
+
+        const int levelDown = static_cast<int>(std::log2(m)) + d + 2;
         for(int i = 0; i < t; ++i) {
-            for(auto& c : b) {
-                c.pow(m);
+            if ((levelDown + 1) * b[0].getCiphertext().logp > b[0].getCiphertext().logq) {
+                for(auto& c : b) {
+                    c.bootstrapInplace();
+                }
             }
 
+            for(auto& c : b) {
+                c = c.pow(m);
+            }
+            // floor(log m)
+
             auto inv = ::CKKSCompare::inv(sum(b), d);
+            // d + 1
 
             for(int j = 0; j < b.size() - 1; ++j) {
                 b[j].modDownToInplace(inv);
                 b[j] *= inv;
                 b[j].rescaleByInplace();
             }
-            b[b.size() - 1] = sum(b.begin(), std::prev(b.end()));
+            // 1
+
+            b[b.size() - 1] = -CKKSCompare::sum(b.begin(), std::prev(b.end())) + 1;
+
+            std::cout << b[0].getCiphertext().logq << std::endl;
         }
 
         return b;
