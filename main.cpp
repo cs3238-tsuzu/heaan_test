@@ -1,57 +1,152 @@
+#include <filesystem>
 #include <HEAAN.h>
 #include "compare.hpp"
 #include "crypyo.hpp"
+#include "naive_bayes.hpp"
 
-using namespace std;
-using namespace NTL;
+//using namespace std;
+//using namespace NTL;
+//
+//int main3(int argc, char** argv) {
+//    long logq = 1200; ///< Ciphertext Modulus
+//    long logp = 30; ///< Real message will be quantized by multiplying 2^40
+//    long logn = 5; ///< log2(The number of slots)
+//    argv[1] = "Bootstrapping";
+//
+////----------------------------------------------------------------------------------
+////   STANDARD TESTS
+////----------------------------------------------------------------------------------
+//
+//    if(string(argv[1]) == "Encrypt") TestScheme::testEncrypt(logq, logp, logn);
+//    if(string(argv[1]) == "EncryptSingle") TestScheme::testEncryptSingle(logq, logp);
+//    if(string(argv[1]) == "Add") TestScheme::testAdd(logq, logp, logn);
+//    if(string(argv[1]) == "Mult") TestScheme::testMult(logq, logp, logn);
+//    if(string(argv[1]) == "iMult") TestScheme::testiMult(logq, logp, logn);
+//
+////----------------------------------------------------------------------------------
+////   ROTATE & CONJUGATE
+////----------------------------------------------------------------------------------
+//
+//    long r = 1; ///< The amout of rotation
+//    if(string(argv[1]) == "RotateFast") TestScheme::testRotateFast(logq, logp, logn, r);
+//    if(string(argv[1]) == "Conjugate") TestScheme::testConjugate(logq, logp, logn);
+//
+////----------------------------------------------------------------------------------
+////   BOOTSTRAPPING
+////----------------------------------------------------------------------------------
+//
+//    logq = logp + 10; //< suppose the input ciphertext of bootstrapping has logq = logp + 10
+//    logn = 3; //< larger logn will make bootstrapping tech much slower
+//    long logT = 4; //< this means that we use Taylor approximation in [-1/T,1/T] with double angle fomula
+//    if(string(argv[1]) == "Bootstrapping") TestScheme::testBootstrap(logq, logp, logn, logT);
+//
+//    return 0;
+//
+//}
+//
+//std::ostream& operator << (std::ostream& os, EasyHEAAN::Cipher& c) {
+//    os << "logp: " << c.getCiphertext().logp
+//       << ", logq: " << c.getCiphertext().logq
+//       << ", n: " << c.getCiphertext().n;
+//
+//    return os;
+//}
+//
 
-int main3(int argc, char** argv) {
-    long logq = 1200; ///< Ciphertext Modulus
-    long logp = 30; ///< Real message will be quantized by multiplying 2^40
-    long logn = 5; ///< log2(The number of slots)
-    argv[1] = "Bootstrapping";
-
-//----------------------------------------------------------------------------------
-//   STANDARD TESTS
-//----------------------------------------------------------------------------------
-
-    if(string(argv[1]) == "Encrypt") TestScheme::testEncrypt(logq, logp, logn);
-    if(string(argv[1]) == "EncryptSingle") TestScheme::testEncryptSingle(logq, logp);
-    if(string(argv[1]) == "Add") TestScheme::testAdd(logq, logp, logn);
-    if(string(argv[1]) == "Mult") TestScheme::testMult(logq, logp, logn);
-    if(string(argv[1]) == "iMult") TestScheme::testiMult(logq, logp, logn);
-
-//----------------------------------------------------------------------------------
-//   ROTATE & CONJUGATE
-//----------------------------------------------------------------------------------
-
-    long r = 1; ///< The amout of rotation
-    if(string(argv[1]) == "RotateFast") TestScheme::testRotateFast(logq, logp, logn, r);
-    if(string(argv[1]) == "Conjugate") TestScheme::testConjugate(logq, logp, logn);
-
-//----------------------------------------------------------------------------------
-//   BOOTSTRAPPING
-//----------------------------------------------------------------------------------
-
-    logq = logp + 10; //< suppose the input ciphertext of bootstrapping has logq = logp + 10
-    logn = 3; //< larger logn will make bootstrapping tech much slower
-    long logT = 4; //< this means that we use Taylor approximation in [-1/T,1/T] with double angle fomula
-    if(string(argv[1]) == "Bootstrapping") TestScheme::testBootstrap(logq, logp, logn, logT);
-
-    return 0;
-
-}
-
-std::ostream& operator << (std::ostream& os, EasyHEAAN::Cipher& c) {
-    os << "logp: " << c.getCiphertext().logp
-       << ", logq: " << c.getCiphertext().logq
-       << ", n: " << c.getCiphertext().n;
+std::ostream& operator << (std::ostream& os, const std::vector<double>& vec) {
+    os << "[";
+    for(auto && v : vec) {
+        os << v << ", ";
+    }
+    os << "]";
 
     return os;
 }
 
-
 int main() {
+    long logq = 1200; ///< Ciphertext modulus (this value should be <= logQ in "scr/Params.h")
+    long logp = 30; ///< Scaling Factor (larger logp will give you more accurate value)
+    long logn = 6; ///< number of slot is 1024 (this value should be < logN in "src/Params.h")
+    long n = 1 << logn;
+    long slots = n;
+    long numThread = 6;
+
+    // Construct and Generate Public Keys //
+    srand(time(NULL));
+    SetNumThreads(numThread);
+    TimeUtils timeutils;
+    Ring ring;
+    SecretKey secretKey(ring);
+    auto scheme = std::make_shared<Scheme>(secretKey, ring);
+//    scheme->addLeftRotKeys(secretKey); ///< When you need left rotation for the vectorized message
+//    scheme->addRightRotKeys(secretKey); ///< When you need right rotation for the vectorized message
+
+    auto crypto = EasyHEAAN::Crypto(scheme, logp, logq, logn);
+    EasyHEAAN::Bootstrapper bs;
+    bs.logq = logp + 10;
+    bs.logQ = logQ;
+
+    scheme->addBootKey(secretKey, logn, bs.logq + bs.logI);
+    scheme->addLeftRotKeys(secretKey);
+//    scheme->addRightRotKeys(secretKey);
+
+    crypto.useSecretKey(secretKey);
+    crypto.setupBootstrapping(bs);
+
+    std::cout << "key generation finished" << std::endl;
+
+    auto info = Bayes::readInfo("../datasets/sample22_info.csv");
+    auto NB = Bayes::readModel("../datasets/sample22_model.csv", info.class_names, info.attr_values);
+    std::cout << "info: " << info.class_num << std::endl;
+
+    auto model_ctxts = Bayes::encryptModel(
+            crypto, info, NB
+            );
+
+    auto data = Bayes::parseData(
+            Bayes::readData("../datasets/sample22_50_test.csv"),
+            info.attr_values
+            );
+    std::cout << "info: " << data.size() << std::endl;
+
+    for(auto&& d : data) {
+        using std::chrono::system_clock;
+        auto p = system_clock::now();
+        auto ct_data = crypto.encrypt(d.begin(), d.end(), n);
+
+        std::vector <EasyHEAAN::Cipher> res_ctxts;
+        res_ctxts.reserve(info.class_num);
+        for (int j = 0; j<info.class_num; j++){
+            auto res = model_ctxts[j];
+            res *= ct_data;
+            res.rescaleByInplace();
+
+            res = res.sumAll();
+            res /= 50;
+            res.rescaleByInplace();
+            res += 0.5;
+
+            res_ctxts.emplace_back(res);
+        }
+
+        for(auto&& c : crypto.decrypt(res_ctxts)) {
+            std::cout << c << std::endl;
+        }
+
+        auto res = CKKSCompare::maxIdx(res_ctxts, 10, 10, 5, 10);
+
+        for(auto&& c : crypto.decrypt(res)) {
+            std::cout << c << std::endl;
+        }
+
+        std::cout << CKKSCompare::getMaxIdx(crypto.decrypt(res)) << std::endl;
+
+        auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(system_clock::now()-p).count();;
+        std::cout <<  dur << "ms" << std::endl;
+    }
+}
+
+int main4() {
     long logq = 1200; ///< Ciphertext modulus (this value should be <= logQ in "scr/Params.h")
     long logp = 30; ///< Scaling Factor (larger logp will give you more accurate value)
     long logn = 3; ///< number of slot is 1024 (this value should be < logN in "src/Params.h")
@@ -71,7 +166,7 @@ int main() {
 
     std::cout << "key generation finished" << std::endl;
 
-    auto crypto = EasyHEAAN::Crypto(scheme, logp, logq);
+    auto crypto = EasyHEAAN::Crypto(scheme, logp, logq, logn);
     EasyHEAAN::Bootstrapper bs;
     bs.logq = logp + 10;
     bs.logQ = logQ;
@@ -168,7 +263,6 @@ int main() {
                     c.bootstrapInplace();
                 }
             }
-
 
             for(auto& c : b) {
                 debugPrint(c);

@@ -339,6 +339,76 @@ namespace EasyHEAAN {
             return *this;
         }
 
+        Cipher left(long r) const {
+            Ciphertext res;
+            scheme->leftRotateFast(res, const_cast<Ciphertext &>(this->cipher), r);
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher& leftInPlace(long r) {
+            Ciphertext res;
+            scheme->leftRotateFastAndEqual(this->cipher, r);
+
+            return *this;
+        }
+
+        Cipher right(long r) const {
+            Ciphertext res;
+            scheme->rightRotateFast(res, const_cast<Ciphertext &>(this->cipher), r);
+
+            return Cipher(*this, std::move(res));
+        }
+
+        Cipher& rightInPlace(long r) {
+            Ciphertext res;
+            scheme->rightRotateFastAndEqual(this->cipher, r);
+
+            return *this;
+        }
+
+        // MSBの桁数を返す
+        static long numBits(long n) {
+            long k = 0;
+            while (n > 0){ k++; n /= 2; }
+            return k;
+        }
+
+        // i-bit目が立っているかどうかを返す
+        static inline bool curBit(long n, long i){
+            return n&(1 << i);
+        }
+
+        Cipher sumAll() {
+            Cipher res = *this, orig = *this;
+
+            long n = 1 << logn;
+            if(n == 1) {
+                return res;
+            }
+
+            long k = numBits(n); // logn + 1と一緒な気がする
+            long e = 1;
+
+            for(long i = k - 2; i >= 0; --i) {
+                auto tmp = res;
+                tmp.leftInPlace(e);
+                res += tmp;
+                e <<= 1;
+
+                if(curBit(n, i)) {
+                    auto tmp = orig;
+
+                    tmp.leftInPlace(-e);
+                    res += tmp;
+
+                    e += 1;
+                }
+            }
+
+            return res;
+        }
+
         Ciphertext &getCiphertext() {
             return this->cipher;
         }

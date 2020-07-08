@@ -142,6 +142,16 @@ namespace CKKSCompare {
 
         return b;
     }
+
+    auto getMaxIdx(const std::vector<std::vector<double>>& vec) {
+        return std::max_element(
+                vec.begin(),
+                vec.end(),
+                [](auto&& a, auto&& b) {
+                    return a[0] < b[0];
+                }
+            ) - vec.begin();
+    }
 //    Cipher comp(const Cipher& a, const Cipher& b, std::size_t d, std::size_t d_, std::size_t t, std::size_t m) {
 //        auto at = a / 2;
 //

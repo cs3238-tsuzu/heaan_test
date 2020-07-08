@@ -18,9 +18,10 @@ namespace EasyHEAAN {
     struct Context {
         std::shared_ptr<Scheme> scheme;
         long logp;
+        long logn;
         std::optional<Bootstrapper> bs;
 
-        Context(std::shared_ptr<Scheme> scheme, long logp): scheme(scheme), logp(logp) {}
+        Context(std::shared_ptr<Scheme> scheme, long logp, long logn): scheme(scheme), logp(logp), logn(logn) {}
         Context() = delete;
         Context(const Context&) = default;
         Context(Context&&) = default;

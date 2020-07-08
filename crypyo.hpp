@@ -12,16 +12,16 @@
 #include <algorithm>
 
 namespace EasyHEAAN {
-    class Crypto: private Context {
+    class Crypto: public Context {
         std::optional<SecretKey> secretKey;
         long logq;
 
     public:
-        Crypto(std::shared_ptr<Scheme> scheme, long logp, long logq): Context(scheme, logp), logq(logq) {}
+        Crypto(std::shared_ptr<Scheme> scheme, long logp, long logq, long logn): Context(scheme, logp, logn), logq(logq) {}
         Crypto(const Context& c, long logq): Context(c), logq(logq) {}
 
         template<class InputIterator>
-        Cipher encrypt(InputIterator begin, InputIterator end, std::size_t n, double def = 0.) {
+        Cipher encrypt(InputIterator begin, InputIterator end, std::size_t n, double def = 0.) const {
             std::vector<double> vec(n, def);
             std::copy(begin, end, vec.begin());
 
@@ -31,7 +31,7 @@ namespace EasyHEAAN {
             return Cipher(*this, std::move(res));
         }
 
-        Cipher encrypt(const std::initializer_list<double>& arr, std::size_t n = -1, double def = 0.) {
+        Cipher encrypt(const std::initializer_list<double>& arr, std::size_t n = -1, double def = 0.) const {
             return this->encrypt(arr.begin(), arr.end(), n, def);
         }
 
@@ -59,6 +59,17 @@ namespace EasyHEAAN {
             }
 
             delete[] v;
+
+            return res;
+        }
+
+        auto decrypt(const std::vector<Cipher>& c) {
+            std::vector<std::vector<double>> res;
+            res.reserve(c.size());
+
+            for(auto&& v : c) {
+                res.emplace_back(decrypt(v));
+            }
 
             return res;
         }
